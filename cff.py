@@ -4,9 +4,10 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from datetime import datetime, timedelta
 from optparse import OptionParser
-from joblib import Parallel, delayed
 import time
 from beautifultable import BeautifulTable
+import warnings
+warnings.simplefilter("ignore")
 
 
 def find_fill(name, val, driver):
@@ -32,10 +33,18 @@ def find_offer(FROM, TO, DATE, TIME, NB_PREV_AFTER, WAIT_TIME):
         chf_index = tokens.index('CHF')
         price = float(tokens[chf_index + 1])
 
-        info = text_offer.split('\n')
-        departure = info[3].split()[-1]
-        arrival = info[4].split()[-1]
-        duration = info[6]
+        departure, arrival, duration = None, None, None
+
+        for line in text_offer.split('\n'):
+            line = line.lower().strip()
+            if line.startswith('departure'):
+                departure = line.split()[-1]
+            elif line.startswith('arrival'):
+                arrival = line.split()[-1]
+            elif line.endswith('min'):
+                duration = line
+
+        assert departure is not None and arrival is not None and duration is not None
 
         dh, dm = departure.split(':')
         ah, am = arrival.split(':')
@@ -98,7 +107,7 @@ def start_driver(WINDOW_SIZE, driver_path='./chromedriver'):
 
 
 def look_up_offers(FROM, TO, DATE, TIME, options):
-    output = '\nTop {} offers {} -> {} around {}\n'.format(options.topk, FROM, TO, datetime.strftime(DATE, '%a %d %b %H:%M'))
+    output = '\nTop {} offers {} -> {} around {} {}\n'.format(options.topk, FROM, TO, datetime.strftime(DATE, '%a %d %b'), TIME)
 
     table = BeautifulTable(max_width=100)
     table.column_headers = ['CHF', 'DepT', 'ArrT', 'Dur', 'DepD']
@@ -116,33 +125,28 @@ def look_up_offers(FROM, TO, DATE, TIME, options):
 
 if __name__ == '__main__':
     parser = OptionParser()
-    parser.add_option('--nb_prev_after', type=int, default=3)
+    parser.add_option('--nb_prev_after', type=int, default=5)
     parser.add_option('--waiting_time', type=int, default=3)
-    parser.add_option('--day_from', type=int, default=datetime.now().day)
-    parser.add_option('--month_from', type=int, default=datetime.now().month)
-    parser.add_option('--year_from', type=int, default=datetime.now().year)
-    parser.add_option('--time_from', type=str, default=datetime.now().time().strftime('%H:%M'))
-    parser.add_option('--day_to', type=int, default=datetime.now().day)
-    parser.add_option('--month_to', type=int, default=datetime.now().month)
-    parser.add_option('--year_to', type=int, default=datetime.now().year)
-    parser.add_option('--time_to', type=str, default=datetime.now().time().strftime('%H:%M'))
     parser.add_option('--from_station', type=str, default='Zürich HB')
     parser.add_option('--to_station', type=str, default='Neuchâtel')
+    parser.add_option('--day', type=int, default=datetime.now().day)
+    parser.add_option('--month', type=int, default=datetime.now().month)
+    parser.add_option('--year', type=int, default=datetime.now().year)
+    parser.add_option('--time', type=str, default=datetime.now().time().strftime('%H:%M'))
     parser.add_option('--topk', type=int, default=8)
     parser.add_option('--max_duration', type=int, default=180)
-
+    parser.add_option('--reversed', action="store_true", default=False)
     (options, args) = parser.parse_args()
-    DATE_FROM = datetime(day=options.day_from, month=options.month_from, year=options.year_from)
-    DATE_TO = datetime(day=options.day_to, month=options.month_to, year=options.year_to)
+    DATE = datetime(day=options.day, month=options.month, year=options.year)
     WINDOW_SIZE = "1920,1080"
 
-    start_time = time.time()
-    for output, table in Parallel(n_jobs=2)(delayed(look_up_offers)(c1, c2, d, t, options) for c1, c2, d, t in ((options.from_station, options.to_station, DATE_FROM, options.time_from), (options.to_station, options.from_station, DATE_TO, options.time_to))):
-        print(output)
-        print(table)
+    from_station, to_station = options.from_station, options.to_station
+    if options.reversed:
+        from_station, to_station = to_station, from_station
 
+    start_time = time.time()
+    output, table = look_up_offers(from_station, to_station, DATE, options.time, options)
+    print(output)
+    print(table)
     stop_time = time.time()
     print('\n\nExecution in {:.2f} seconds'.format(stop_time - start_time))
-
-
-
