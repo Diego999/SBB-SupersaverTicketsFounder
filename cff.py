@@ -76,8 +76,8 @@ def find_offer(FROM, TO, DATE, TIME, NB_PREV_AFTER, WAIT_TIME):
 
     # Find multiple dates if trips might be on another day
     all_dates = [(date.location['y'], datetime.strptime(date.text.strip(), '%a, %d.%m.%Y')) for date in driver.find_elements_by_xpath("//p[@class='mod_timetable_day_change']")]
-    assert 1 <= len(all_dates) <= 2
-    buttons = driver.find_elements_by_xpath("//div[@class='mod_accordion_item_heading var_timetable']")
+    assert 1 <= len(all_dates) <= 3
+    buttons = driver.find_elements_by_xpath("//div[contains(@class, 'sbb_mod_ext mod_accordion_item var_timetable')]")
     text_offers = [(button.text, button) for button in buttons if 'CHF' in button.text]
 
     offers = []
