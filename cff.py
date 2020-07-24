@@ -133,7 +133,7 @@ if __name__ == '__main__':
     parser.add_option('--month', type=int, default=datetime.now().month)
     parser.add_option('--year', type=int, default=datetime.now().year)
     parser.add_option('--time', type=str, default=datetime.now().time().strftime('%H:%M'))
-    parser.add_option('--topk', type=int, default=8)
+    parser.add_option('--topk', type=int, default=15)
     parser.add_option('--max_duration', type=int, default=180)
     parser.add_option('--reversed', action="store_true", default=False)
     (options, args) = parser.parse_args()
