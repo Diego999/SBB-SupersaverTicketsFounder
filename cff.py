@@ -13,18 +13,25 @@ import warnings
 warnings.simplefilter("ignore")
 
 SUPER_SAVER_SET_TOKENS = {'Sparbillett', 'Supersaver ticket available'}
-
-
-def wait_before_clicking(driver, wait):
-    is_present = len(driver.find_elements_by_xpath("//div[@id='j_idt2585']")) > 0
-    if is_present:
-        wait.until(EC.presence_of_element_located((By.XPATH, "//div[@id='j_idt2585'][contains(@style, 'display: none')]")))
-        wait.until(EC.presence_of_element_located((By.XPATH, "//div[@id='j_idt2585_blocker'][contains(@style, 'display: none')]")))
+MAX_ITER = 10
 
 
 def is_first_class_ticket(driver, wait, button_idx):
     action = webdriver.common.action_chains.ActionChains(driver)
-    while driver.find_elements_by_xpath("//div[@id='j_idt2585']")[0].value_of_css_property('display') != 'none':
+    reiterate = True
+
+    counter = 0
+    while reiterate:
+        try:
+            blockers = driver.find_elements_by_xpath("//div[@id='j_idt2585']")
+            reiterate = not (len(blockers) > 0)
+        except:
+            time.sleep(0.1)
+            counter += 1
+            if counter >= MAX_ITER:
+                reiterate = False
+
+    while blockers[0].value_of_css_property('display') != 'none':
         time.sleep(0.1)
 
     try:
@@ -49,9 +56,9 @@ def is_first_class_ticket(driver, wait, button_idx):
     text_class1 = labels[1].text.strip()
 
     first_class = text_class1 == ''
-    supp = text_class1.split()[-1] if not first_class else ''
+    supp = text_class1.split()[-1].strip() if not first_class else ''
 
-    if supp == '0.0':
+    if supp == '0.00':
         first_class = True
         supp = ''
 
@@ -70,10 +77,12 @@ def extend(xpath, NB_PREV_AFTER, driver, wait):
     counter = 0
 
     while counter < NB_PREV_AFTER:
-        wait_before_clicking(driver, wait)
-        wait.until(EC.presence_of_element_located((By.XPATH, xpath)))
-        driver.find_element_by_xpath(xpath).click()
-        counter += 1
+        try:
+            driver.find_element_by_xpath(xpath).click()
+            counter += 1
+        except:
+            time.sleep(0.1)
+    time.sleep(0.5)
 
 
 def find_offer(FROM, TO, DATE, TIME, NB_PREV_AFTER):
@@ -127,21 +136,26 @@ def find_offer(FROM, TO, DATE, TIME, NB_PREV_AFTER):
 
     extend("//span[@id='verbindungsUebersicht_fruehereVerbindungenSuchen']", NB_PREV_AFTER, driver, wait)
     extend("//span[@id='verbindungsUebersicht_spaetereVerbindungenSuchen']", NB_PREV_AFTER, driver, wait)
-    wait_before_clicking(driver, wait)
-    wait_before_clicking(driver, wait)
+    time.sleep(1)
 
-    # Find multiple dates if trips might be on another day
-    all_dates = [(date.location['y'], datetime.strptime(date.text.strip(), '%a, %d.%m.%Y')) for date in driver.find_elements_by_xpath("//p[@class='mod_timetable_day_change']")]
-    assert 1 <= len(all_dates) <= 3
-    wait_before_clicking(driver, wait)
+    reiterate = True
+    while reiterate:
+        try:
+            # Find multiple dates if trips might be on another day
+            all_dates = [(date.location['y'], datetime.strptime(date.text.strip(), '%a, %d.%m.%Y')) for date in driver.find_elements_by_xpath("//p[@class='mod_timetable_day_change']")]
+            assert 1 <= len(all_dates) <= 3
+            reiterate = False
+        except:
+            time.sleep(0.1)
 
-    buttons_xpath = "//div[contains(@class, 'sbb_mod_ext mod_accordion_item var_timetable')]"
-    try:
-        wait.until(EC.element_to_be_clickable((By.XPATH, buttons_xpath)))
-    except:
-        pass
+    reiterate = True
+    while reiterate:
+        try:
+            buttons_text = [(button_text.text, button_text) for button_text in driver.find_elements_by_xpath("//div[contains(@class, 'sbb_mod_ext mod_accordion_item var_timetable')]")]
+            reiterate = False
+        except:
+            time.sleep(0.1)
 
-    buttons_text = [(button_text.text, button_text) for button_text in driver.find_elements_by_xpath(buttons_xpath)]
     text_offers = [(button[0], button[1], i, 'CHF' in button[0]) for i, button in enumerate(buttons_text)]
     text_offers = [(x[0], x[1], x[2], x[3], len(set(x[0].split('\n')).intersection(SUPER_SAVER_SET_TOKENS)) > 0) for x in text_offers] # Add whether the offer is a super saver ticket or not!
 
@@ -169,7 +183,7 @@ def find_offer(FROM, TO, DATE, TIME, NB_PREV_AFTER):
 
 def start_driver(WINDOW_SIZE, driver_path='./chromedriver'):
     browser_options = Options()
-    #browser_options.add_argument("--headless")
+    browser_options.add_argument("--headless")
     browser_options.add_argument("--window-size=%s" % WINDOW_SIZE)
     return webdriver.Chrome(driver_path, options=browser_options)
 
@@ -201,11 +215,12 @@ if __name__ == '__main__':
     parser.add_option('--to_station', type=str, default='Neuchâtel')
     parser.add_option('--day', type=int, default=datetime.now().day)
     parser.add_option('--month', type=int, default=datetime.now().month)
+    parser.add_option('--nb_prev_after', type=int, default=2)
     parser.add_option('--year', type=int, default=datetime.now().year)
     parser.add_option('--time', type=str, default=datetime.now().time().strftime('%H:%M'))
     parser.add_option('--topk', type=int, default=15)
     parser.add_option('--max_duration', type=int, default=180)
-    parser.add_option('--reversed', action="store_true", default=False)
+    parser.add_option('--reversed', action="store_true", default=True)
     (options, args) = parser.parse_args()
     DATE = datetime(day=options.day, month=options.month, year=options.year)
     WINDOW_SIZE = "1920,1080"
