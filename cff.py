@@ -209,12 +209,11 @@ def look_up_offers(FROM, TO, DATE, TIME, options):
 
 if __name__ == '__main__':
     parser = OptionParser()
-    parser.add_option('--nb_prev_after', type=int, default=5)
+    parser.add_option('--nb_prev_after', type=int, default=2)
     parser.add_option('--from_station', type=str, default='Zürich HB')
     parser.add_option('--to_station', type=str, default='Neuchâtel')
     parser.add_option('--day', type=int, default=datetime.now().day)
     parser.add_option('--month', type=int, default=datetime.now().month)
-    parser.add_option('--nb_prev_after', type=int, default=2)
     parser.add_option('--year', type=int, default=datetime.now().year)
     parser.add_option('--time', type=str, default=datetime.now().time().strftime('%H:%M'))
     parser.add_option('--topk', type=int, default=15)
