@@ -210,7 +210,6 @@ def look_up_offers(FROM, TO, DATE, TIME, options):
 if __name__ == '__main__':
     parser = OptionParser()
     parser.add_option('--nb_prev_after', type=int, default=5)
-    parser.add_option('--waiting_time', type=int, default=3)
     parser.add_option('--from_station', type=str, default='Zürich HB')
     parser.add_option('--to_station', type=str, default='Neuchâtel')
     parser.add_option('--day', type=int, default=datetime.now().day)
