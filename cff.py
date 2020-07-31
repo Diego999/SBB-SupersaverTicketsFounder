@@ -1,13 +1,62 @@
-import time
-from selenium import webdriver
+import tqdm
+from selenium.webdriver.common.action_chains import ActionChains
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
-from datetime import datetime, timedelta
+from datetime import datetime
 from optparse import OptionParser
 import time
 from beautifultable import BeautifulTable
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.common.by import By
 import warnings
 warnings.simplefilter("ignore")
+
+SUPER_SAVER_SET_TOKENS = {'Sparbillett', 'Supersaver ticket available'}
+
+
+def wait_before_clicking(driver, wait):
+    is_present = len(driver.find_elements_by_xpath("//div[@id='j_idt2585']")) > 0
+    if is_present:
+        wait.until(EC.presence_of_element_located((By.XPATH, "//div[@id='j_idt2585'][contains(@style, 'display: none')]")))
+        wait.until(EC.presence_of_element_located((By.XPATH, "//div[@id='j_idt2585_blocker'][contains(@style, 'display: none')]")))
+
+
+def is_first_class_ticket(driver, wait, button_idx):
+    action = webdriver.common.action_chains.ActionChains(driver)
+    while driver.find_elements_by_xpath("//div[@id='j_idt2585']")[0].value_of_css_property('display') != 'none':
+        time.sleep(0.1)
+
+    try:
+        wait.until(EC.element_to_be_clickable((By.XPATH, "//div[@class='mod_timetable_cta leistungOfferierenWrapper updatableForAbPreis']")))
+    except:
+        pass
+    button = driver.find_elements_by_xpath("//div[@class='mod_timetable_cta leistungOfferierenWrapper updatableForAbPreis']")[button_idx]
+    action.move_to_element_with_offset(button, 5, 5)
+    action.click()
+    action.perform()
+    try:
+        button.click()
+    except:
+        pass
+
+    wait.until(EC.presence_of_element_located((By.XPATH, "//p[@class='mod_totalprice_wrapper_value']")))
+
+    # They ALWAYS display the price for 2nd class. But sometimes the 1st is cheaper!
+    final_price = float(driver.find_element_by_xpath("//p[@class='mod_totalprice_wrapper_value']").text.split()[-1])
+    labels = driver.find_elements_by_xpath("//span[@class='mod_ws_toggle_button_additional_label']")
+    assert len(labels) == 2
+    text_class1 = labels[1].text.strip()
+
+    first_class = text_class1 == ''
+    supp = text_class1.split()[-1] if not first_class else ''
+
+    if supp == '0.0':
+        first_class = True
+        supp = ''
+
+    driver.back()
+    return first_class, final_price, supp
 
 
 def find_fill(name, val, driver):
@@ -17,21 +66,25 @@ def find_fill(name, val, driver):
     elem.send_keys(val)
 
 
-def extend(xpath, NB_PREV_AFTER, driver):
+def extend(xpath, NB_PREV_AFTER, driver, wait):
     counter = 0
+
     while counter < NB_PREV_AFTER:
-        try:
-            driver.find_element_by_xpath(xpath).click()
-            counter += 1
-        except:
-            time.sleep(0.1)
+        wait_before_clicking(driver, wait)
+        wait.until(EC.presence_of_element_located((By.XPATH, xpath)))
+        driver.find_element_by_xpath(xpath).click()
+        counter += 1
 
 
-def find_offer(FROM, TO, DATE, TIME, NB_PREV_AFTER, WAIT_TIME):
-    def extract_info(text_offer):
+def find_offer(FROM, TO, DATE, TIME, NB_PREV_AFTER):
+    def extract_info(text_offer, button_idx, is_supersaver, driver, wait):
         tokens = text_offer.split()
         chf_index = tokens.index('CHF')
         price = float(tokens[chf_index + 1])
+        first_class = False
+        supp = ''
+        if is_supersaver:
+            first_class, price, supp = is_first_class_ticket(driver, wait, button_idx)
 
         departure, arrival, duration = None, None, None
 
@@ -52,7 +105,9 @@ def find_offer(FROM, TO, DATE, TIME, NB_PREV_AFTER, WAIT_TIME):
         return {'price':price,
                 'dep_date':DATE.replace(hour=int(dh), minute=int(dm)),
                 'arr_date':DATE.replace(hour=int(ah), minute=int(am)),
-                'dur':duration}
+                'dur':duration,
+                'first':first_class,
+                'supp for 1st':supp}
 
     def compute_duration_in_minute(str_time):
         tmp = str_time.split()
@@ -60,29 +115,42 @@ def find_offer(FROM, TO, DATE, TIME, NB_PREV_AFTER, WAIT_TIME):
         return int(h)*60 + int(m)
 
     driver = start_driver(WINDOW_SIZE)
+    wait = WebDriverWait(driver, 20)
+
     driver.get("https://www.sbb.ch/en/buying/pages/fahrplan/fahrplan.xhtml")
 
     find_fill('shopForm_von_valueComp', FROM, driver)
     find_fill('shopForm_nach_valueComp', TO, driver)
     find_fill('shopForm_datepicker_valueComp', datetime.strftime(DATE, '%a, %d.%m.%Y'), driver)
     find_fill('shopForm_timepicker_valueComp', TIME, driver)
-
     driver.find_element_by_xpath("//button[@class='text__primarybutton button verbindungSuchen']").click()
-    time.sleep(WAIT_TIME)
 
-    extend("//span[@id='verbindungsUebersicht_fruehereVerbindungenSuchen']", NB_PREV_AFTER, driver)
-    extend("//span[@id='verbindungsUebersicht_spaetereVerbindungenSuchen']", NB_PREV_AFTER, driver)
-    time.sleep(WAIT_TIME)
+    extend("//span[@id='verbindungsUebersicht_fruehereVerbindungenSuchen']", NB_PREV_AFTER, driver, wait)
+    extend("//span[@id='verbindungsUebersicht_spaetereVerbindungenSuchen']", NB_PREV_AFTER, driver, wait)
+    wait_before_clicking(driver, wait)
+    wait_before_clicking(driver, wait)
 
     # Find multiple dates if trips might be on another day
     all_dates = [(date.location['y'], datetime.strptime(date.text.strip(), '%a, %d.%m.%Y')) for date in driver.find_elements_by_xpath("//p[@class='mod_timetable_day_change']")]
     assert 1 <= len(all_dates) <= 3
-    buttons = driver.find_elements_by_xpath("//div[contains(@class, 'sbb_mod_ext mod_accordion_item var_timetable')]")
-    text_offers = [(button.text, button) for button in buttons if 'CHF' in button.text]
+    wait_before_clicking(driver, wait)
+
+    buttons_xpath = "//div[contains(@class, 'sbb_mod_ext mod_accordion_item var_timetable')]"
+    try:
+        wait.until(EC.element_to_be_clickable((By.XPATH, buttons_xpath)))
+    except:
+        pass
+
+    buttons_text = [(button_text.text, button_text) for button_text in driver.find_elements_by_xpath(buttons_xpath)]
+    text_offers = [(button[0], button[1], i, 'CHF' in button[0]) for i, button in enumerate(buttons_text)]
+    text_offers = [(x[0], x[1], x[2], x[3], len(set(x[0].split('\n')).intersection(SUPER_SAVER_SET_TOKENS)) > 0) for x in text_offers] # Add whether the offer is a super saver ticket or not!
 
     offers = []
-    for text, button in text_offers:
-        offer_dict = extract_info(text)
+    for text, button, idx, is_valid, is_supersaver in tqdm.tqdm(text_offers, desc='Finding the best options'):
+        if not is_valid:
+            continue
+
+        offer_dict = extract_info(text, idx, is_supersaver, driver, wait)
         if compute_duration_in_minute(offer_dict['dur']) <= options.max_duration:
             offers.append(offer_dict)
 
@@ -95,13 +163,13 @@ def find_offer(FROM, TO, DATE, TIME, NB_PREV_AFTER, WAIT_TIME):
     driver.close()
     driver.quit()
 
-    offers = [(offer['price'], offer['dep_date'], offer['dur'], offer['arr_date']) for offer in offers]
+    offers = [(offer['price'], offer['first'], offer['supp for 1st'], offer['dep_date'], offer['dur'], offer['arr_date']) for offer in offers]
     return sorted(offers, key=lambda x: x[0], reverse=False)
 
 
 def start_driver(WINDOW_SIZE, driver_path='./chromedriver'):
     browser_options = Options()
-    browser_options.add_argument("--headless")
+    #browser_options.add_argument("--headless")
     browser_options.add_argument("--window-size=%s" % WINDOW_SIZE)
     return webdriver.Chrome(driver_path, options=browser_options)
 
@@ -110,15 +178,17 @@ def look_up_offers(FROM, TO, DATE, TIME, options):
     output = '\nTop {} offers {} -> {} around {} {}\n'.format(options.topk, FROM, TO, datetime.strftime(DATE, '%a %d %b'), TIME)
 
     table = BeautifulTable(max_width=100)
-    table.column_headers = ['CHF', 'DepT', 'ArrT', 'Dur', 'DepD']
-    for offer_dict in find_offer(FROM, TO, DATE, TIME, options.nb_prev_after, options.waiting_time)[:options.topk]:
-        tmp = offer_dict[2].split()
-        dur_h, dur_m =tmp[0], tmp[2]
+    table.column_headers = ['CHF', 'Class', 'Supp 1st', 'DepT', 'ArrT', 'Dur', 'DepD']
+    for offer_dict in find_offer(FROM, TO, DATE, TIME, options.nb_prev_after)[:options.topk]:
+        tmp = offer_dict[4].split()
+        dur_h, dur_m = tmp[0], tmp[2]
         row = ['{:.2f}'.format(offer_dict[0]),
-               datetime.strftime(offer_dict[1], '%H:%M'),
+               offer_dict[1],
+               offer_dict[2],
                datetime.strftime(offer_dict[3], '%H:%M'),
+               datetime.strftime(offer_dict[5], '%H:%M'),
                '{}:{:02d}'.format(dur_h, int(dur_m)),
-               datetime.strftime(offer_dict[1], '%a %d %b')]
+               datetime.strftime(offer_dict[3], '%a %d %b')]
         table.append_row(row=row)
     return output, table
 
