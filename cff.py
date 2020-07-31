@@ -218,7 +218,7 @@ if __name__ == '__main__':
     parser.add_option('--time', type=str, default=datetime.now().time().strftime('%H:%M'))
     parser.add_option('--topk', type=int, default=15)
     parser.add_option('--max_duration', type=int, default=180)
-    parser.add_option('--reversed', action="store_true", default=True)
+    parser.add_option('--reversed', action="store_true", default=False)
     (options, args) = parser.parse_args()
     DATE = datetime(day=options.day, month=options.month, year=options.year)
     WINDOW_SIZE = "1920,1080"
