@@ -77,6 +77,7 @@ def is_first_class_ticket(driver, wait, button_idx):
         supp = ''
 
     driver.back()
+    time.sleep(5)#TODO
     return first_class, final_price, supp
 
 
@@ -170,7 +171,7 @@ def find_offer(FROM, TO, DATE, TIME, NB_PREV_AFTER):
             buttons_text = [(button_text.text, button_text) for button_text in driver.find_elements_by_xpath("//div[contains(@class, 'sbb_mod_ext mod_accordion_item var_timetable')]")]
             reiterate = False
         except:
-            time.sleep(0.1)
+            time.sleep(0.5)
 
     text_offers = [(button[0], button[1], i, 'CHF' in button[0]) for i, button in enumerate(buttons_text)]
     text_offers = [(x[0], x[1], x[2], x[3], len(set(x[0].split('\n')).intersection(SUPER_SAVER_SET_TOKENS)) > 0) for x in text_offers] # Add whether the offer is a super saver ticket or not!
@@ -185,11 +186,16 @@ def find_offer(FROM, TO, DATE, TIME, NB_PREV_AFTER):
             offers.append(offer_dict)
 
         if len(all_dates) > 1: # Need to fix dates
-            if button.location['y'] > all_dates[0][0] and button.location['y'] < all_dates[1][0]:
-                offer_dict['dep_date'] = offer_dict['dep_date'].replace(day=all_dates[0][1].day, month=all_dates[0][1].month, year=all_dates[0][1].year)
-            else:
+            try:
+                if button.location['y'] > all_dates[0][0] and button.location['y'] < all_dates[1][0]:
+                    offer_dict['dep_date'] = offer_dict['dep_date'].replace(day=all_dates[0][1].day, month=all_dates[0][1].month, year=all_dates[0][1].year)
+                else:
+                    offer_dict['dep_date'] = offer_dict['dep_date'].replace(day=all_dates[1][1].day, month=all_dates[1][1].month, year=all_dates[1][1].year)
+            except:
                 offer_dict['dep_date'] = offer_dict['dep_date'].replace(day=all_dates[1][1].day, month=all_dates[1][1].month, year=all_dates[1][1].year)
 
+        for x in sorted([(offer['price'], offer['first'], offer['supp for 1st'], offer['dep_date'], offer['dur'], offer['arr_date']) for offer in offers], key=lambda x: x[0], reverse=False):
+            print(x)
     driver.close()
     driver.quit()
 
