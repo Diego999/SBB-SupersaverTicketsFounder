@@ -205,7 +205,7 @@ def find_offer(FROM, TO, DATE, TIME, NB_PREV_AFTER):
 
 def start_driver(WINDOW_SIZE, driver_path='./chromedriver'):
     browser_options = Options()
-    browser_options.add_argument("--headless")
+    #browser_options.add_argument("--headless")
     browser_options.add_argument("--window-size=%s" % WINDOW_SIZE)
     return webdriver.Chrome(driver_path, options=browser_options)
 
