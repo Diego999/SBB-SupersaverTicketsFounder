@@ -48,10 +48,18 @@ def is_first_class_ticket(driver, wait, button_idx):
             time.sleep(0.1)
     action.click()
     action.perform()
-    try:
-        button.click()
-    except:
-        pass
+
+    counter = 0
+    reiterate = True
+    while reiterate:
+        try:
+            button.click()
+            reiterate = False
+        except:
+            time.sleep(0.25)
+            counter += 1
+            if counter > 10:
+                reiterate = False
 
     wait.until(EC.presence_of_element_located((By.XPATH, "//p[@class='mod_totalprice_wrapper_value']")))
 
