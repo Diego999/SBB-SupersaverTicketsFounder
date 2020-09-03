@@ -23,7 +23,7 @@ def is_first_class_ticket(driver, wait, button_idx):
     counter = 0
     while reiterate:
         try:
-            blockers = driver.find_elements_by_xpath("//div[@id='j_idt2585']")
+            blockers = driver.find_elements_by_xpath("//div[@id='j_idt2587']") # SBB might change it
             reiterate = not (len(blockers) > 0)
         except:
             time.sleep(0.1)
